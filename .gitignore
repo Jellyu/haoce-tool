@@ -1,0 +1,28 @@
+# --- secrets / personal state (never commit) ---
+config.json
+selftest.json
+
+# --- generated per-book data ---
+books/
+work/
+audio/
+data/
+
+# --- build output ---
+build/
+dist/
+*.spec
+__pycache__/
+*.pyc
+
+# --- large local binaries (adb / ffmpeg are copied in at build time) ---
+bin/adb.exe
+bin/AdbWinApi.dll
+bin/AdbWinUsbApi.dll
+bin/ffmpeg.exe
+
+# --- os / editor noise ---
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
