@@ -35,6 +35,26 @@
 
 所有运行数据写在 exe 同级：`config.json`、`books/`、`work/`，卸载只需删除文件夹。
 
+## 什么时候需要 MuMu 模拟器
+
+只有 **3 个功能**要碰 adb / 模拟器，其余全是纯 HTTPS 请求：
+
+| 功能 | 需要 MuMu | 实现 |
+| --- | --- | --- |
+| 读取登录态 | 是 | `adb root` 后读取 App WebView 的 Cookies 库，取 `_UHAO`（`core.py`） |
+| 读取当前书籍 | 是 | `adb pull` 设备里的 `DCStorage` 库，解析出 `book_id` / `novel_id`（`books.py`） |
+| 自动翻页 | 是 | `uiautomator dump` 读页码 + `input swipe` 横向翻页（`turner.py`） |
+| 刷新状态 / 朗读 / 摘抄 / 讨论 | 否 | 直接请求 `appclient.haoce.com` |
+| 建书籍库（下载 PDF / 提取正文） | 否 | 下载 CDN 的 PDF，本地 `pdftotext` 提取 |
+
+几点说明：
+
+1. **登录态和书籍 ID 是一次性的**。拿到后写进 `config.json`（`cookie`、`book_id`、`novel_id`），之后朗读 / 摘抄 / 讨论全程不碰 adb。严格说只有「自动翻页」每次都需要模拟器。
+2. **书籍 ID 可以绕过 adb**：在书籍栏手动输入 `book_id` 点「加载 ID」即可。只是没有 `novel_id` 时，阅读器接口取文会退化成走 PDF。
+3. **朗读不需要模拟器，但需要本地 ffmpeg**：edge-tts 生成的 mp3 要转成 AMR-NB 再上传，绿色版已内置 `bin/ffmpeg.exe`。
+
+所以：**已经有 `cookie` 和 `book_id`、只想补任务的话，模拟器可以完全不开**。
+
 ## 换书 / 没有 PDF 的书
 
 - **自动识别**：在 App 打开任意一本书的阅读页或任务页，点「读取当前书籍」。工具读取 `DCStorage` 里的 `_winExtras`，支持 `readerFull` 的 `detail.book_id`，也支持 `topicNew?book_id=...` 这类任务页 URL。
