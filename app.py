@@ -113,6 +113,7 @@ class App(tk.Tk):
         self.page_var = tk.StringVar(value='页码：-（请先在 App 打开阅读页）')
         self.speed = tk.StringVar(value='normal')
         self._build()
+        self._show_account()
         self._after_id = self.after(200, self._drain)
         self.protocol('WM_DELETE_WINDOW', self._close)
         self.refresh_async()
@@ -140,6 +141,10 @@ class App(tk.Tk):
         self.pill = tk.Label(h, text=' 就绪 ', font=('Microsoft YaHei UI', 10, 'bold'),
                              fg='#062033', bg=ACC, padx=10, pady=4)
         self.pill.pack(side='right', pady=(6, 0))
+        self.acct_var = tk.StringVar(value='账号：未登录')
+        self.acct_lbl = tk.Label(h, textvariable=self.acct_var, font=('Microsoft YaHei UI', 10),
+                                 fg=DIM, bg=BG)
+        self.acct_lbl.pack(side='right', padx=(0, 12), pady=(6, 0))
 
     def _build_book(self, parent):
         c = card(parent)
@@ -219,6 +224,9 @@ class App(tk.Tk):
         b = mk_btn(row, '读取登录态', self.login, 'ghost', padx=12, pady=7)
         b.pack(side='right', padx=6)
         self.buttons.append(b)
+        self.clear_btn = mk_btn(row, '清除登录态', self.clear_login, 'red', padx=12, pady=7)
+        self.clear_btn.pack(side='right', padx=6)
+        self.buttons.append(self.clear_btn)
 
     def _build_turn(self, parent):
         c = card(parent)
@@ -471,11 +479,52 @@ class App(tk.Tk):
     def login(self):
         def work():
             try:
-                self.log(core.login_from_device())
+                msg = core.login_from_device()
+                self.log(msg)
+                self._show_account()
                 self.refresh_async()
             except Exception as e:
                 self.log('读取登录态失败：' + str(e)[:200])
         threading.Thread(target=work, daemon=True).start()
+
+    def _show_account(self, cookie_str=None):
+        c = cookie_str if cookie_str is not None else (api.load_cfg().get('cookie') or '')
+        label = api.who_label(c)
+        if label:
+            self.acct_var.set('账号：' + label)
+            self.acct_lbl.configure(fg=OK)
+        else:
+            self.acct_var.set('账号：未登录')
+            self.acct_lbl.configure(fg=DIM)
+
+    def _reset_view(self):
+        self.targets = {}
+        self.joined = None
+        for k in ('topic', 'reply', 'langdu', 'zhaichao', 'report'):
+            self.vars[k].set('-')
+        self.vars['state'].set('未选书')
+        self.book_var.set('书籍：未选择（点“读取当前书籍”）')
+        self.book_id_var.set('')
+        self._last_state = None
+        self._update_task_buttons()
+
+    def clear_login(self):
+        cur = api.load_cfg().get('cookie') or ''
+        label = api.who_label(cur) or '当前账号'
+        if not messagebox.askyesno('清除登录态',
+                                   '将清除本机保存的登录态（%s）并取消当前书籍选择。\n'
+                                   '模拟器里好策 App 的登录不会退出。\n\n'
+                                   '换号操作时先清除，再点“读取登录态”，可避免污染旧账号数据。\n\n'
+                                   '确定继续？' % label):
+            return
+        try:
+            api.clear_login()
+        except Exception as e:
+            self.log('清除登录态失败：' + type(e).__name__ + ' ' + str(e)[:200])
+            return
+        self._show_account('')
+        self._reset_view()
+        self.log('登录态已清除（原账号 %s），书籍选择已重置' % label)
 
     def _ensure_login(self):
         if api.load_cfg().get('cookie'):
@@ -483,6 +532,7 @@ class App(tk.Tk):
         self.log('尚未读取登录态，正在从模拟器获取 Cookie…')
         try:
             self.log(core.login_from_device())
+            self._show_account()
             return True
         except Exception as e:
             self.log('自动读取登录态失败：' + type(e).__name__ + ' ' + str(e)[:200])

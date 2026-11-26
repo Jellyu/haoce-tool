@@ -45,15 +45,57 @@ def cookie():
     return c
 
 
+def _uhao_data(cookie_str):
+    try:
+        m = re.search(r'_UHAO=([^;]+)', cookie_str or '')
+        if not m:
+            return {}
+        data = json.loads(urllib.parse.unquote(m.group(1)))
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def uid_of(cookie_str):
+    return str(_uhao_data(cookie_str).get('uid') or '')
+
+
+def who_label(cookie_str):
+    d = _uhao_data(cookie_str)
+    num = str(d.get('number') or '')
+    if num:
+        return '学号 ' + num
+    uid = str(d.get('uid') or '')
+    return ('UID ' + uid) if uid else ''
+
+
 def uid():
     try:
-        m = re.search(r'_UHAO=([^;]+)', cookie())
-        if not m:
-            return ''
-        data = json.loads(urllib.parse.unquote(m.group(1)))
-        return str((data or {}).get('uid') or '')
+        return uid_of(cookie())
     except Exception:
         return ''
+
+
+def clear_login():
+    cfg = load_cfg()
+    old = who_label(cfg.get('cookie') or '')
+    try:
+        old_bid = int(cfg.get('book_id') or 0)
+    except Exception:
+        old_bid = 0
+    cfg['cookie'] = ''
+    cfg['book_id'] = 0
+    cfg['novel_id'] = 0
+    save_cfg(cfg)
+    if old_bid > 0:
+        # 旧书的 targets/joined 缓存属于上一个账号，清除后必须强制重新拉取，
+        # 否则新账号读同一本书会沿用旧目标（正文段落库与账号无关，保留）
+        try:
+            import books
+            books.update_meta(old_bid, stub=True)
+        except Exception:
+            pass
+    return old
 
 
 def request(path, data=None, timeout=40, retries=2):

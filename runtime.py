@@ -76,15 +76,43 @@ def online_devices(adb):
     return out
 
 
-def pick_serial(adb, cfg=None):
-    cfg = cfg or {}
-    serial = cfg.get('serial')
+MUMU_ENDPOINTS = ('127.0.0.1:16384', '127.0.0.1:7555', '127.0.0.1:5555', '127.0.0.1:16416')
+
+
+def _devices(adb):
     try:
-        devices = online_devices(adb)
+        return online_devices(adb)
     except Exception:
-        devices = []
-    if serial and (not devices or serial in devices):
-        return serial
+        return []
+
+
+def _connect(adb, endpoint, timeout=8):
+    try:
+        subprocess.run([adb, 'connect', endpoint], capture_output=True, timeout=timeout,
+                       creationflags=NO_WINDOW)
+    except Exception:
+        pass
+
+
+def ensure_online(adb, cfg=None):
+    cfg = cfg or {}
+    serial = (cfg.get('serial') or '').strip()
+    devices = _devices(adb)
     if devices:
-        return devices[0]
-    return serial or '127.0.0.1:16384'
+        return serial if serial in devices else devices[0]
+    # MuMu 的 adb 端口默认不在 adb devices 里，必须先 connect 才会出现
+    tried = set()
+    for ep in ([serial] if serial else []) + list(MUMU_ENDPOINTS):
+        if ep in tried:
+            continue
+        tried.add(ep)
+        _connect(adb, ep)
+        devices = _devices(adb)
+        if devices:
+            return serial if serial in devices else devices[0]
+    return ''
+
+
+def pick_serial(adb, cfg=None):
+    # 没有在线设备时返回空串，让调用方给出明确提示，而不是拿一个死地址去 wait-for-device
+    return ensure_online(adb, cfg)

@@ -222,7 +222,10 @@ def _wait_online(adb, serial, timeout=60):
     online = _pick_online(adb, serial)
     if online:
         return online
-    # 没有任何在线设备：模拟器可能还在启动，等它上线再选
+    # 没有在线设备：先尝试 connect 常见模拟器端口，再等待其上线
+    online = runtime.ensure_online(adb, {'serial': serial})
+    if online:
+        return online
     try:
         subprocess.run([adb, 'wait-for-device'], capture_output=True, timeout=timeout,
                        creationflags=runtime.NO_WINDOW)
@@ -240,6 +243,8 @@ def login_from_device(adb=None, serial=None):
     if not adb:
         raise RuntimeError('找不到 adb：可放入 bin/adb.exe 或在 config.json 配置 adb 路径')
     serial = serial or runtime.pick_serial(adb, cfg)
+    if not serial:
+        raise RuntimeError('未发现在线设备，请确认 MuMu 已启动并已连接 adb')
     tmp = os.path.join(tempfile.gettempdir(), 'haoce_cookies_%d.db' % os.getpid())
     try:
         _adb_bytes(adb, serial, ['root'], timeout=40)
@@ -270,9 +275,26 @@ def login_from_device(adb=None, serial=None):
         pass
     if not row:
         raise RuntimeError('设备中没有 _UHAO，请先在好策 App 内登录')
-    cfg.update({'cookie': '_UHAO=' + row[0], 'adb': adb, 'serial': serial})
+    new_cookie = '_UHAO=' + row[0]
+    old_cookie = cfg.get('cookie') or ''
+    old_uid, new_uid = api.uid_of(old_cookie), api.uid_of(new_cookie)
+    switched = bool(old_uid and new_uid and old_uid != new_uid)
+    cfg.update({'cookie': new_cookie, 'adb': adb, 'serial': serial})
+    if switched:
+        # 换号后旧书的 book_id / targets 缓存都属于上一个账号，必须作废
+        old_bid = int(cfg.get('book_id') or 0)
+        cfg['book_id'] = 0
+        cfg['novel_id'] = 0
+        if old_bid > 0:
+            try:
+                books.update_meta(old_bid, stub=True)
+            except Exception:
+                pass
     api.save_cfg(cfg)
-    return '登录态已保存'
+    if switched:
+        return ('账号已变更：%s → %s，已清除书籍选择'
+                % (api.who_label(old_cookie) or '旧账号', api.who_label(new_cookie) or '新账号'))
+    return '登录态已保存（%s）' % (api.who_label(new_cookie) or '未知账号')
 
 
 def status(book_id=None):

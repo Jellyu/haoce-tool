@@ -487,14 +487,19 @@ def current_book(progress=print):
     if not adb:
         raise RuntimeError('找不到 adb：把 adb.exe 放进 bin/，或在 config.json 里配置 adb 路径')
     serial = runtime.pick_serial(adb, cfg)
+    if not serial:
+        raise RuntimeError('未发现已连接的模拟器：请先启动 MuMu，并在其设置里开启 ADB 调试')
     remote = '/sdcard/haoce_dcstorage_%d.db' % os.getpid()
     tmp = os.path.join(tempfile.gettempdir(), 'haoce_dcstorage_%d.db' % os.getpid())
     try:
         subprocess.run([adb, '-s', serial, 'root'], capture_output=True, timeout=40,
                        creationflags=runtime.NO_WINDOW)
         time.sleep(1.2)
-        subprocess.run([adb, '-s', serial, 'wait-for-device'], capture_output=True, timeout=40,
-                       creationflags=runtime.NO_WINDOW)
+        try:
+            subprocess.run([adb, '-s', serial, 'wait-for-device'], capture_output=True, timeout=25,
+                           creationflags=runtime.NO_WINDOW)
+        except subprocess.TimeoutExpired:
+            raise RuntimeError('模拟器无响应（adb root 后 25 秒未重新上线）：请重启 MuMu 后重试')
         cp = subprocess.run([adb, '-s', serial, 'shell', 'cp',
                              '/data/data/app.haoce.com/databases/DCStorage', remote],
                             capture_output=True, text=True, errors='replace', timeout=60,
